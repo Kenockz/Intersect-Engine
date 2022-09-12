@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations.Schema;
@@ -27,7 +27,7 @@ using Newtonsoft.Json;
 namespace Intersect.Server.Entities
 {
 
-    public partial class Entity : IDisposable
+    public abstract partial class Entity : IDisposable
     {
 
         //Instance Values
@@ -307,6 +307,11 @@ namespace Intersect.Server.Entities
                 Monitor.TryEnter(EntityLock, ref lockObtained);
                 if (lockObtained)
                 {
+                    if (Target?.IsDisposed ?? false)
+                    {
+                        Target = default;
+                    }
+
                     //Cast timers
                     if (CastTime != 0 && !IsCasting && SpellCastSlot < Spells.Count && SpellCastSlot >= 0)
                     {
@@ -345,6 +350,13 @@ namespace Intersect.Server.Entities
                     foreach (var status in statusArray)
                     {
                         status.TryRemoveStatus();
+                    }
+
+                    //Blocking timers
+                    if(Blocking && AttackTimer < Timing.Global.Milliseconds)
+                    {
+                        Blocking = false;
+                        PacketSender.SendEntityAttack(this, -1);
                     }
                 }
             }
@@ -440,7 +452,7 @@ namespace Intersect.Server.Entities
                         return -2;
                     }
 
-                    if (tileAttribute.Type == MapAttributes.NpcAvoid && this is Npc)
+                    if (tileAttribute.Type == MapAttributes.NpcAvoid && (this is Npc || (this is EventPageInstance evtPage && !evtPage.MyPage.IgnoreNpcAvoids)))
                     {
                         return -2;
                     }
@@ -581,7 +593,7 @@ namespace Intersect.Server.Entities
             {
                 switch (MoveRoute.Actions[MoveRoute.ActionIndex].Type)
                 {
-                      case MoveRouteEnum.MoveUp:
+                    case MoveRouteEnum.MoveUp:
                         if (CanMove((int) Directions.Up) == -1)
                         {
                             Move((int) Directions.Up, forPlayer, false, true);
@@ -613,40 +625,8 @@ namespace Intersect.Server.Entities
                         }
 
                         break;
-                    case MoveRouteEnum.MoveUpLeft:
-                        if (CanMove((int) Directions.UpLeft) == -1)
-                        {
-                            Move((int) Directions.UpLeft, forPlayer, false, true);
-                            moved = true;
-                        }
-
-                        break;
-                    case MoveRouteEnum.MoveUpRight:
-                        if (CanMove((int) Directions.UpRight) == -1)
-                        {
-                            Move((int) Directions.UpRight, forPlayer, false, true);
-                            moved = true;
-                        }
-
-                        break;
-                    case MoveRouteEnum.MoveDownLeft:
-                        if (CanMove((int) Directions.DownLeft) == -1)
-                        {
-                            Move((int) Directions.DownLeft, forPlayer, false, true);
-                            moved = true;
-                        }
-
-                        break;
-                    case MoveRouteEnum.MoveDownRight:
-                        if (CanMove((int) Directions.DownRight) == -1)
-                        {
-                            Move((int) Directions.DownRight, forPlayer, false, true);
-                            moved = true;
-                        }
-
-                        break;
                     case MoveRouteEnum.MoveRandomly:
-                        var dir = (byte) Randomization.Next(0, 8);
+                        var dir = (byte)Randomization.Next(0, Options.Instance.Sprites.Directions);
                         if (CanMove(dir) == -1)
                         {
                             Move(dir, forPlayer);
@@ -679,22 +659,6 @@ namespace Intersect.Server.Entities
                                 break;
                             case (int) Directions.Right:
                                 moveDir = (int) Directions.Left;
-
-                                break;
-                            case (int) Directions.UpLeft:
-                                moveDir = (int) Directions.DownRight;
-
-                                break;
-                            case (int) Directions.UpRight:
-                                moveDir = (int) Directions.DownLeft;
-
-                                break;
-                            case (int) Directions.DownLeft:
-                                moveDir = (int) Directions.UpRight;
-
-                                break;
-                            case (int) Directions.DownRight:
-                                moveDir = (int) Directions.UpLeft;
 
                                 break;
                         }
@@ -730,39 +694,22 @@ namespace Intersect.Server.Entities
                         switch (Dir)
                         {
                             case (int) Directions.Up:
-                                lookDir = (int) Directions.UpRight;
-
-                                break;
-                            case (int) Directions.Down:
-                                lookDir = (int) Directions.DownLeft;
-
-                                break;
-                            case (int) Directions.Left:
-                                lookDir = (int) Directions.UpLeft;
-
-                                break;
-                            case (int) Directions.Right:
-                                lookDir = (int) Directions.DownRight;
-
-                                break;
-                            case (int) Directions.UpLeft:
-                                lookDir = (int) Directions.Up;
-
-                                break;
-                            case (int) Directions.UpRight:
                                 lookDir = (int) Directions.Right;
 
                                 break;
-                            case (int) Directions.DownLeft:
+                            case (int) Directions.Down:
                                 lookDir = (int) Directions.Left;
 
                                 break;
-                            case (int) Directions.DownRight:
+                            case (int) Directions.Left:
+                                lookDir = (int) Directions.Up;
+
+                                break;
+                            case (int) Directions.Right:
                                 lookDir = (int) Directions.Down;
 
                                 break;
                         }
-
 
                         ChangeDir(lookDir);
                         moved = true;
@@ -771,36 +718,20 @@ namespace Intersect.Server.Entities
                     case MoveRouteEnum.Turn90CounterClockwise:
                         switch (Dir)
                         {
-                            case (int) Directions.Up:
-                                lookDir = (int) Directions.UpLeft;
+                            case (int)Directions.Up:
+                                lookDir = (int)Directions.Left;
 
                                 break;
-                            case (int) Directions.Down:
-                                lookDir = (int) Directions.DownRight;
+                            case (int)Directions.Down:
+                                lookDir = (int)Directions.Right;
 
                                 break;
-                            case (int) Directions.Left:
-                                lookDir = (int) Directions.DownLeft;
+                            case (int)Directions.Left:
+                                lookDir = (int)Directions.Down;
 
                                 break;
-                            case (int) Directions.Right:
-                                lookDir = (int) Directions.UpRight;
-
-                                break;
-                            case (int) Directions.UpLeft:
-                                lookDir = (int) Directions.Left;
-
-                                break;
-                            case (int) Directions.UpRight:
-                                lookDir = (int) Directions.Up;
-
-                                break;
-                            case (int) Directions.DownLeft:
-                                lookDir = (int) Directions.Down;
-
-                                break;
-                            case (int) Directions.DownRight:
-                                lookDir = (int) Directions.Right;
+                            case (int)Directions.Right:
+                                lookDir = (int)Directions.Up;
 
                                 break;
                         }
@@ -828,22 +759,6 @@ namespace Intersect.Server.Entities
                                 lookDir = (int) Directions.Left;
 
                                 break;
-                            case (int) Directions.UpLeft:
-                                lookDir = (int) Directions.DownRight;
-
-                                break;
-                            case (int) Directions.UpRight:
-                                lookDir = (int) Directions.DownLeft;
-
-                                break;
-                            case (int) Directions.DownLeft:
-                                lookDir = (int) Directions.UpRight;
-
-                                break;
-                            case (int) Directions.DownRight:
-                                lookDir = (int) Directions.UpLeft;
-
-                                break;
                         }
 
                         ChangeDir(lookDir);
@@ -851,7 +766,7 @@ namespace Intersect.Server.Entities
 
                         break;
                     case MoveRouteEnum.TurnRandomly:
-                        ChangeDir((byte)Randomization.Next(0, 8));
+                        ChangeDir((byte)Randomization.Next(0, Options.Instance.Sprites.Directions));
                         moved = true;
 
                         break;
@@ -909,7 +824,7 @@ namespace Intersect.Server.Entities
             var time = 1000f / (float) (1 + Math.Log(Stat[(int) Stats.Speed].Value()));
             if (Blocking)
             {
-                time += time * Options.BlockingSlow;
+                time += time * (float)Options.BlockingSlow;
             }
 
             return Math.Min(1000f, time);
@@ -952,26 +867,6 @@ namespace Intersect.Server.Entities
 
                         break;
                     case 3: //Right
-                        ++xOffset;
-
-                        break;
-                    case 4: //NW
-                        --yOffset;
-                        --xOffset;
-
-                        break;
-                    case 5: //NE
-                        --yOffset;
-                        ++xOffset;
-
-                        break;
-                    case 6: //SW
-                        ++yOffset;
-                        --xOffset;
-
-                        break;
-                    case 7: //SE
-                        ++yOffset;
                         ++xOffset;
 
                         break;
@@ -1254,16 +1149,11 @@ namespace Intersect.Server.Entities
         {
             if (AttackTimer < Timing.Global.Milliseconds)
             {
-                if (blocking && !Blocking && AttackTimer < Timing.Global.Milliseconds)
+                if (blocking && !Blocking)
                 {
                     Blocking = true;
-                    PacketSender.SendEntityAttack(this, -1);
-                }
-                else if (!blocking && Blocking)
-                {
-                    Blocking = false;
                     AttackTimer = Timing.Global.Milliseconds + CalculateAttackTime();
-                    PacketSender.SendEntityAttack(this, 0);
+                    PacketSender.SendEntityAttack(this, CalculateAttackTime(), true);
                 }
             }
         }
@@ -1681,13 +1571,19 @@ namespace Intersect.Server.Entities
                         PacketSender.SendActionMsg(
                             target, Strings.Combat.ImmuneToEffect, CustomColors.Combat.Status
                         );
-                    } else
+                    }
+                    else
                     {
                         // Else, apply the status
                         new Status(
                             target, this, spellBase, spellBase.Combat.Effect, spellBase.Combat.Duration,
                             spellBase.Combat.TransformSprite
                         );
+
+                        if (target is Npc npc)
+                        {
+                            npc.AssignTarget(this);
+                        }
 
                         PacketSender.SendActionMsg(
                             target, Strings.Combat.status[(int)spellBase.Combat.Effect], CustomColors.Combat.Status
@@ -1710,7 +1606,13 @@ namespace Intersect.Server.Entities
                     if (!target.Immunities.Contains(spellBase.Combat.Effect))
                     {
                         new Status(target, this, spellBase, spellBase.Combat.Effect, statBuffTime, "");
-                    } else
+
+                        if (target is Npc npc)
+                        {
+                            npc.AssignTarget(this);
+                        }
+                    }
+                    else
                     {
                         PacketSender.SendActionMsg(target, Strings.Combat.ImmuneToEffect, CustomColors.Combat.Status);
                     }
@@ -1741,7 +1643,7 @@ namespace Intersect.Server.Entities
         }
 
         //Attacking with weapon or unarmed.
-        public virtual void TryAttack(Entity target, bool targetOnFocus)
+        public virtual void TryAttack(Entity target)
         {
             //See player and npc override of this virtual void
         }
@@ -1843,12 +1745,14 @@ namespace Intersect.Server.Entities
         {
             var damagingAttack = baseDamage > 0;
             var secondaryDamagingAttack = secondaryDamage > 0;
-            
+
             if (enemy == null)
             {
                 return;
             }
 
+            //Let's save the entity's vital before they takes damage to use in lifesteal
+            var enemyHealth = enemy.GetVital(Vitals.Health);
             var invulnerable = enemy.CachedStatuses.Any(status => status.Type == StatusTypes.Invulnerable);
 
             bool isCrit = false;
@@ -1868,6 +1772,54 @@ namespace Intersect.Server.Entities
                 baseDamage = Formulas.CalculateDamage(
                 baseDamage, damageType, scalingStat, scaling, critMultiplier, this, enemy
             );
+            }
+
+            //Check on each attack if the enemy is a player AND if they are blocking.
+            if (enemy is Player player && player.Blocking)
+            {
+                //Getting the ID and Item the player is currently using.
+                var itemId = player.Items[player.Equipment[Options.ShieldIndex]].ItemId;
+                var item = ItemBase.Get(itemId);
+
+                if (item != null)
+                {
+                    var originalBaseDamage = baseDamage;
+                    var blockChance = item.BlockChance;
+                    var blockAmount = item.BlockAmount / 100.0;
+                    var blockAbsorption = item.BlockAbsorption / 100.0;
+
+                    //Generate a new attempt to block
+                    if (Randomization.Next(0, 101) < blockChance)
+                    {
+                        if (item.BlockAmount < 100)
+                        {
+                            baseDamage -= (int)Math.Round(baseDamage * blockAmount);
+                        }
+                        else
+                        {
+                            baseDamage = 0;
+                        }
+
+                        var absorptionAmount = (int)Math.Round(baseDamage * blockAbsorption);
+
+                        if(absorptionAmount == 0)
+                        {
+                            absorptionAmount = (int)Math.Round(originalBaseDamage * blockAbsorption);
+                        }
+
+                        if (blockAbsorption > 0)
+                        {
+                            player.AddVital(Vitals.Health, absorptionAmount);
+
+                            PacketSender.SendActionMsg(
+                            enemy, Strings.Combat.addsymbol + (int)Math.Abs(absorptionAmount),
+                            CustomColors.Combat.Heal
+                            );
+                        }
+
+                        PacketSender.SendActionMsg(enemy, Strings.Combat.blocked, CustomColors.Combat.Blocked);
+                    }
+                }
             }
 
             //Calculate Damages
@@ -1983,11 +1935,14 @@ namespace Intersect.Server.Entities
             enemy.CombatTimer = Timing.Global.Milliseconds + Options.CombatTime;
             CombatTimer = Timing.Global.Milliseconds + Options.CombatTime;
 
+            var thisPlayer = this as Player;
+
             //Check for lifesteal
-            if (GetType() == typeof(Player) && enemy.GetType() != typeof(Resource))
+            if (this is Player && !(enemy is Resource))
             {
-                var lifesteal = ((Player) this).GetEquipmentBonusEffect(EffectType.Lifesteal) / 100f;
-                var healthRecovered = lifesteal * baseDamage;
+                var lifesteal = thisPlayer.GetEquipmentBonusEffect(EffectType.Lifesteal) / 100f;
+                var healthRecovered = Math.Min(enemyHealth, lifesteal * baseDamage);
+
                 if (healthRecovered > 0) //Don't send any +0 msg's.
                 {
                     AddVital(Vitals.Health, (int) healthRecovered);
@@ -2000,7 +1955,7 @@ namespace Intersect.Server.Entities
             //Dead entity check
             if (enemy.GetVital(Vitals.Health) <= 0)
             {
-                if (enemy.GetType() == typeof(Npc) || enemy.GetType() == typeof(Resource))
+                if (enemy is Npc || enemy is Resource)
                 {
                     lock (enemy.EntityLock)
                     {
@@ -2010,10 +1965,10 @@ namespace Intersect.Server.Entities
                 else
                 {
                     //PVP Kill common events
-                    if (!enemy.Dead && enemy is Player && this is Player)
+                    if (!enemy.Dead && enemy is Player enemyPlayer && this is Player)
                     {
-                        ((Player)this).StartCommonEventsWithTrigger(CommonEventTrigger.PVPKill, "", enemy.Name);
-                        ((Player)enemy).StartCommonEventsWithTrigger(CommonEventTrigger.PVPDeath, "", this.Name);
+                        thisPlayer.StartCommonEventsWithTrigger(CommonEventTrigger.PVPKill, "", enemy.Name);
+                        enemyPlayer.StartCommonEventsWithTrigger(CommonEventTrigger.PVPDeath, "", this.Name);
                     }
 
                     lock (enemy.EntityLock)
@@ -2045,9 +2000,9 @@ namespace Intersect.Server.Entities
             }
 
             // Add a timer before able to make the next move.
-            if (GetType() == typeof(Npc))
+            if (this is Npc thisNpc)
             {
-                ((Npc) this).MoveTimer = Timing.Global.Milliseconds + (long) GetMovementTime();
+                thisNpc.MoveTimer = Timing.Global.Milliseconds + (long) GetMovementTime();
             }
         }
 
@@ -2128,8 +2083,8 @@ namespace Intersect.Server.Entities
 
                     if (status.Type == StatusTypes.Snare)
                     {
-                        // If this spell is NOT a Dash or Warp type ability, we can not use it while snared.
-                        if (spell.SpellType != SpellTypes.Dash && spell.SpellType != SpellTypes.Warp && spell.SpellType != SpellTypes.WarpTo)
+                        // If this spell is a Dash or Warp type ability, we can not use it while snared.
+                        if (spell.SpellType == SpellTypes.Dash || spell.SpellType == SpellTypes.Warp || spell.SpellType == SpellTypes.WarpTo)
                         {
                             reason = SpellCastFailureReason.Snared;
                             return false;
@@ -2491,30 +2446,6 @@ namespace Intersect.Server.Entities
                 {
                     return true;
                 }
-                
-                myTile.Translate(-2, -1);
-                if (myTile.Matches(enemyTile))
-                {
-                    return true;
-                }
-
-                myTile.Translate(2, 0);
-                if (myTile.Matches(enemyTile))
-                {
-                    return true;
-                }
-
-                myTile.Translate(-2, 2);
-                if (myTile.Matches(enemyTile))
-                {
-                    return true;
-                }
-
-                myTile.Translate(2, 0);
-                if (myTile.Matches(enemyTile))
-                {
-                    return true;
-                }
             }
 
             return false;
@@ -2547,30 +2478,6 @@ namespace Intersect.Server.Entities
 
                 myTile.Translate(2, 0);
                 if (myTile.Matches(enemyTile) && Dir == (int) Directions.Right)
-                {
-                    return true;
-                }
-                
-                myTile.Translate(-2, -1);
-                if (myTile.Matches(enemyTile) && Dir == (int)Directions.UpLeft)
-                {
-                    return true;
-                }
-
-                myTile.Translate(2, 0);
-                if (myTile.Matches(enemyTile) && Dir == (int)Directions.UpRight)
-                {
-                    return true;
-                }
-
-                myTile.Translate(-2, 2);
-                if (myTile.Matches(enemyTile) && Dir == (int)Directions.DownLeft)
-                {
-                    return true;
-                }
-
-                myTile.Translate(2, 0);
-                if (myTile.Matches(enemyTile) && Dir == (int)Directions.DownRight)
                 {
                     return true;
                 }
@@ -2781,83 +2688,59 @@ namespace Intersect.Server.Entities
             Dead = true;
         }
 
-        private void DropItems(Entity killer, bool sendUpdate = true)
+        protected virtual bool ShouldDropItem(Entity killer, ItemBase itemDescriptor, Item item, float dropRateModifier, out Guid lootOwner)
+        {
+            lootOwner = default;
+
+            var dropRate = item.DropChance * 1000 * dropRateModifier;
+            var dropResult = Randomization.Next(1, 100001);
+            if (dropResult >= dropRate)
+            {
+                return false;
+            }
+
+            // Set the attributes for this item.
+            item.Set(new Item(item.ItemId, item.Quantity, true));
+            return true;
+        }
+
+        protected virtual void OnDropItem(InventorySlot slot, Item drop) { }
+
+        protected virtual void DropItems(Entity killer, bool sendUpdate = true)
         {
             // Drop items
-            for (var n = 0; n < Items.Count; n++)
+            foreach (var slot in Items)
             {
-                if (Items[n] == null)
+                if (slot == default)
                 {
                     continue;
                 }
 
                 // Don't mess with the actual object.
-                var item = Items[n].Clone();
+                var drop = slot.Clone();
                 
-                var itemBase = ItemBase.Get(item.ItemId);
-                if (itemBase == null)
+                var itemDescriptor = ItemBase.Get(drop.ItemId);
+                if (itemDescriptor == default)
                 {
                     continue;
                 }
 
-                //Don't lose bound items on death for players.
-                if (this.GetType() == typeof(Player))
-                {
-                    if (itemBase.DropChanceOnDeath == 0)
-                    {
-                        continue;
-                    }
-                }
-
-                //Calculate the killers luck (If they are a player)
                 var playerKiller = killer as Player;
-                var luck = 1 + playerKiller?.GetEquipmentBonusEffect(EffectType.Luck) / 100f;
-
-                Guid lootOwner = Guid.Empty;
-                if (this is Player)
+                var dropRateModifier = 1 + (playerKiller?.GetEquipmentBonusEffect(EffectType.Luck) / 100f ?? 0);
+                if (!ShouldDropItem(killer, itemDescriptor, drop, dropRateModifier, out Guid lootOwner))
                 {
-                    //Player drop rates
-                    if (Randomization.Next(1, 101) >= itemBase.DropChanceOnDeath * luck)
-                    {
-                        continue;
-                    }
-
-                    // It's a player, try and set ownership to the player that killed them.. If it was a player.
-                    // Otherwise set to self, so they can come and reclaim their items.
-                    lootOwner = playerKiller?.Id ?? Id;
-                }
-                else
-                {
-                    //Npc drop rates
-                    var randomChance = Randomization.Next(1, 100001);
-                    if (randomChance >= (item.DropChance * 1000) * luck)
-                    {
-                        continue;
-                    }
-
-                    // Set owner to player that killed this, if there is any.
-                    if (playerKiller != null && this is Npc thisNpc)
-                    {
-                        // Yes, so set the owner to the player that killed it.
-                        lootOwner = playerKiller.Id;
-                    }
-
-                    // Set the attributes for this item.
-                    item.Set(new Item(item.ItemId, item.Quantity, true));
+                    continue;
                 }
 
                 // Spawn the actual item!
                 if (MapController.TryGetInstanceFromMap(MapId, MapInstanceId, out var instance))
                 {
-                    instance.SpawnItem(X, Y, item, item.Quantity, lootOwner, sendUpdate);
+                    instance.SpawnItem(X, Y, drop, drop.Quantity, lootOwner, sendUpdate);
                 }
 
-                // Remove the item from inventory if a player.
-                var player = this as Player;
-                player?.TryTakeItem(Items[n], item.Quantity);
+                // Process the drop (for players this would remove it from their inventory)
+                OnDropItem(slot, drop);
             }
-
-
         }
 
         public virtual bool IsDead()

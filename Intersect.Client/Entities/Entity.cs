@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -93,8 +93,6 @@ namespace Intersect.Client.Entities
         public bool IsLocal { get; set; } = false;
 
         public bool IsMoving { get; set; }
-        
-        public bool IsATarget = false;
 
         //Caching
         public IMapInstance LatestMap { get; set; }
@@ -172,7 +170,7 @@ namespace Intersect.Client.Entities
         public long LastActionTime { get; set; } = -1;
         #endregion
 
-        public EntityTypes Type { get; set; }
+        public EntityTypes Type { get; }
 
         public int Aggression { get; set; }
 
@@ -191,11 +189,13 @@ namespace Intersect.Client.Entities
 
         public byte Z { get; set; }
 
-        public Entity(Guid id, EntityPacket packet, bool isEvent = false)
+        public Entity(Guid id, EntityPacket packet, EntityTypes entityType)
         {
             Id = id;
+            Type = entityType;
             MapId = Guid.Empty;
-            if (id != Guid.Empty && !isEvent)
+
+            if (Id != Guid.Empty && Type != EntityTypes.Event)
             {
                 for (var i = 0; i < Options.MaxInvItems; i++)
                 {
@@ -232,19 +232,14 @@ namespace Intersect.Client.Entities
 
         public Pointf Origin => LatestMap == default ? Pointf.Empty : mOrigin;
 
-        public Pointf Center
-        {
-            get
-            {
-                var sprite = Globals.ContentManager.GetTexture(TextureType.Entity, Sprite);
-                return Origin - ((sprite == default) ? Pointf.Empty : (Pointf.UnitY * sprite.Center.Y / Options.Instance.Sprites.Directions));
-            }
-        }
+        protected virtual Pointf CenterOffset => (Texture == default) ? Pointf.Empty : (Pointf.UnitY * Texture.Center.Y / Options.Instance.Sprites.Directions);
+
+        public Pointf Center => Origin - CenterOffset;
 
         public byte Dir
         {
             get => mDir;
-            set => mDir = (byte)((value + 8) % 8);
+            set => mDir = (byte)((value + Options.Instance.Sprites.Directions) % Options.Instance.Sprites.Directions);
         }
 
         public virtual string TransformedSprite
@@ -307,11 +302,6 @@ namespace Intersect.Client.Entities
         public IMapInstance MapInstance => Maps.MapInstance.Get(MapId);
 
         public virtual Guid MapId { get; set; }
-
-        public virtual EntityTypes GetEntityType()
-        {
-            return EntityTypes.GlobalEntity;
-        }
 
         //Deserializing
         public virtual void Load(EntityPacket packet)
@@ -497,7 +487,7 @@ namespace Intersect.Client.Entities
         //Returns the amount of time required to traverse 1 tile
         public virtual float GetMovementTime()
         {
-            var time = 1000f / (float)(1 + Math.Log(Stat[(int)Stats.Speed]));
+            var time = 1000f / (float) (1 + Math.Log(Stat[(int) Stats.Speed]));
             if (IsBlocking)
             {
                 time += time * (float)Options.BlockingSlow;
@@ -595,21 +585,10 @@ namespace Intersect.Client.Entities
             }
             else if (IsMoving)
             {
-                float deplacementTime = ecTime * Options.TileHeight / GetMovementTime();
-                byte dir;
-                if (this is Player player && player.MoveDir != -1 && AttackTimer > Timing.Global.Ticks / TimeSpan.TicksPerMillisecond)
-                {
-                    dir = (byte)player.MoveDir;
-                }
-                else
-                {
-                    dir = Dir;
-                }
-                
-                switch (dir)
+                switch (Dir)
                 {
                     case 0:
-                        OffsetY -= deplacementTime;
+                        OffsetY -= (float)ecTime * (float)Options.TileHeight / GetMovementTime();
                         OffsetX = 0;
                         if (OffsetY < 0)
                         {
@@ -619,7 +598,7 @@ namespace Intersect.Client.Entities
                         break;
 
                     case 1:
-                        OffsetY += deplacementTime;
+                        OffsetY += (float)ecTime * (float)Options.TileHeight / GetMovementTime();
                         OffsetX = 0;
                         if (OffsetY > 0)
                         {
@@ -629,7 +608,7 @@ namespace Intersect.Client.Entities
                         break;
 
                     case 2:
-                        OffsetX -= deplacementTime;
+                        OffsetX -= (float)ecTime * (float)Options.TileHeight / GetMovementTime();
                         OffsetY = 0;
                         if (OffsetX < 0)
                         {
@@ -639,52 +618,12 @@ namespace Intersect.Client.Entities
                         break;
 
                     case 3:
-                        OffsetX += deplacementTime;
+                        OffsetX += (float)ecTime * (float)Options.TileHeight / GetMovementTime();
                         OffsetY = 0;
                         if (OffsetX > 0)
                         {
                             OffsetX = 0;
                         }
-
-                        break;
-                    case 4: // NW     
-                        OffsetY -= deplacementTime;
-                        OffsetX -= deplacementTime;
-
-                        if (OffsetY < 0)
-                            OffsetY = 0;
-                        if (OffsetX < 0)
-                            OffsetX = 0;
-
-                        break;
-                    case 5: // NE
-                        OffsetY -= deplacementTime;
-                        OffsetX += deplacementTime;
-
-                        if (OffsetY < 0)
-                            OffsetY = 0;
-                        if (OffsetX > 0)
-                            OffsetX = 0;
-
-                        break;
-                    case 6: //SW
-                        OffsetY += deplacementTime;
-                        OffsetX -= deplacementTime;
-
-                        if (OffsetY > 0)
-                            OffsetY = 0;
-                        if (OffsetX < 0)
-                            OffsetX = 0;
-
-                        break;
-                    case 7: // SE
-                        OffsetY += deplacementTime;
-                        OffsetX += deplacementTime;
-
-                        if (OffsetY > 0)
-                            OffsetY = 0;
-                        if (OffsetX > 0)
-                            OffsetX = 0;
 
                         break;
                 }
@@ -1011,47 +950,7 @@ namespace Intersect.Client.Entities
                 return;
             }
 
-            var d = 0;
-            switch (Dir)
-            {
-                case 0:
-                    d = 3;
-
-                    break;
-                case 1:
-                    d = 0;
-
-                    break;
-                case 2:
-                    d = 1;
-
-                    break;
-                case 3:
-                    d = 2;
-
-                    break;
-                case 4: // UpLeft
-                    d = 1;
-
-                    break;
-                case 5: // UpRight
-                    d = 2;
-
-                    break;
-                case 6: // DownLeft
-                    d = 1;
-
-                    break;
-                case 7: // DownRight
-                    d = 2;
-
-                    break;
-                default:
-                    Dir = 0;
-                    d = 3;
-
-                    break;
-            }
+            var d = (Dir + (Options.Instance.Sprites.Directions - 1)) % Options.Instance.Sprites.Directions;
 
             var frameWidth = texture.GetWidth() / SpriteFrames;
             var frameHeight = texture.GetHeight() / Options.Instance.Sprites.Directions;
@@ -1077,21 +976,11 @@ namespace Intersect.Client.Entities
             );
 
             WorldPos = destRectangle;
-            
-            int pDollIndex = Dir; // Actually it's because the index would've been outside of the bounds
-            if (Dir == 4 || Dir == 6)
-            {
-                pDollIndex = 2;
-            }
-            else if (Dir == 5 || Dir == 7)
-            {
-                pDollIndex = 3;
-            }
-            
+
             //Order the layers of paperdolls and sprites
-            for (var z = 0; z < Options.PaperdollOrder[pDollIndex].Count; z++)
+            for (var z = 0; z < Options.PaperdollOrder[Dir].Count; z++)
             {
-                var paperdoll = Options.PaperdollOrder[pDollIndex][z];
+                var paperdoll = Options.PaperdollOrder[Dir][z];
                 var equipSlot = Options.EquipmentSlots.IndexOf(paperdoll);
 
                 //Check for player
@@ -1157,7 +1046,7 @@ namespace Intersect.Client.Entities
         public virtual void DrawEquipment(string filename, Color renderColor, FloatRect entityRect)
         {
             var map = Maps.MapInstance.Get(MapId);
-            if (map == null)
+            if (map == null || map.HideEquipment)
             {
                 return;
             }
@@ -1180,47 +1069,7 @@ namespace Intersect.Client.Entities
                 return;
             }
 
-            var d = 0;
-            switch (Dir)
-            {
-                case 0:
-                    d = 3;
-
-                    break;
-                case 1:
-                    d = 0;
-
-                    break;
-                case 2:
-                    d = 1;
-
-                    break;
-                case 3:
-                    d = 2;
-
-                    break;
-                case 4: // UpLeft
-                    d = 1;
-
-                    break;
-                case 5: // UpRight
-                    d = 2;
-
-                    break;
-                case 6: // DownLeft
-                    d = 1;
-
-                    break;
-                case 7: // DownRight
-                    d = 2;
-
-                    break;
-                default:
-                    Dir = 0;
-                    d = 3;
-
-                    break;
-            }
+            var d = (Dir + (Options.Instance.Sprites.Directions -1)) % Options.Instance.Sprites.Directions;
 
             var frameWidth = paperdollTex.GetWidth() / spriteFrames;
             var frameHeight = paperdollTex.GetHeight() / Options.Instance.Sprites.Directions;
@@ -1343,16 +1192,6 @@ namespace Intersect.Client.Entities
                 return;
             }
 
-            if (borderColor == null)
-            {
-                borderColor = Color.Transparent;
-            }
-
-            if (backgroundColor == null)
-            {
-                backgroundColor = Color.Transparent;
-            }
-
             //Check for npc colors
             if (textColor == null)
             {
@@ -1384,9 +1223,19 @@ namespace Intersect.Client.Entities
                 if (color != null)
                 {
                     textColor = color?.Name;
-                    backgroundColor = color?.Background;
-                    borderColor = color?.Outline;
+                    backgroundColor = backgroundColor ?? color?.Background;
+                    borderColor = borderColor ?? color?.Outline;
                 }
+            }
+
+            if (borderColor == null)
+            {
+                borderColor = Color.Transparent;
+            }
+
+            if (backgroundColor == null)
+            {
+                backgroundColor = Color.Transparent;
             }
 
             var map = MapInstance;
@@ -1396,7 +1245,7 @@ namespace Intersect.Client.Entities
             }
 
             var name = Name;
-            if ((this is Player && Options.Player.ShowLevelByName) || (!(this is Player) && Options.Npc.ShowLevelByName))
+            if ((this is Player && Options.Player.ShowLevelByName) || (Type == EntityTypes.GlobalEntity && Options.Npc.ShowLevelByName))
             {
                 name = Strings.GameWindow.EntityNameAndLevel.ToString(Name, Level);
             }
@@ -1775,7 +1624,7 @@ namespace Intersect.Client.Entities
                 SpriteAnimation = SpriteAnimations.Normal;
                 LastActionTime = Timing.Global.Milliseconds;
             }
-            else if (AttackTimer > Timing.Global.Ticks / TimeSpan.TicksPerMillisecond) //Attacking
+            else if (AttackTimer > Timing.Global.Ticks / TimeSpan.TicksPerMillisecond && !IsBlocking) //Attacking
             {
                 var timeIn = CalculateAttackTime() - (AttackTimer - Timing.Global.Ticks / TimeSpan.TicksPerMillisecond);
                 LastActionTime = Timing.Global.Milliseconds;
@@ -1891,7 +1740,7 @@ namespace Intersect.Client.Entities
                     (SpriteAnimations)animationName,
                     Globals.ContentManager.GetTexture(
                         TextureType.Entity,
-                        $@"{baseFilename}_{animationName}.{extension}"
+                        $@"{baseFilename}_{animationName}{extension}"
                     )
                 );
             }
@@ -1916,7 +1765,8 @@ namespace Intersect.Client.Entities
             ref IEntity blockedBy,
             bool ignoreAliveResources = true,
             bool ignoreDeadResources = true,
-            bool ignoreNpcAvoids = true
+            bool ignoreNpcAvoids = true,
+            bool projectileTrigger = false
         )
         {
             var mapInstance = Maps.MapInstance.Get(mapId);
@@ -1981,42 +1831,43 @@ namespace Intersect.Client.Entities
                             en.Value.Y == tmpY &&
                             en.Value.Z == Z)
                         {
-                            if (en.Value.GetType() != typeof(Projectile))
+                            if (!(en.Value is Projectile))
                             {
-                                if (en.Value.GetType() == typeof(Resource))
+                                switch (en.Value)
                                 {
-                                    var resourceBase = ((Resource)en.Value).BaseResource;
-                                    if (resourceBase != null)
-                                    {
-                                        if (!ignoreAliveResources && !((Resource)en.Value).IsDead)
+                                    case Resource resource:
+                                        var resourceBase = resource.BaseResource;
+                                        if (resourceBase != null)
                                         {
-                                            blockedBy = en.Value;
+                                            if (projectileTrigger)
+                                            {
+                                                bool isDead = resource.IsDead;
+                                                if (!ignoreAliveResources && !isDead || !ignoreDeadResources && isDead)
+                                                {
+                                                    blockedBy = en.Value;
 
-                                            return -6;
+                                                    return -6;
+                                                }
+
+                                                return -1;
+                                            }
+
+                                            if (resourceBase.WalkableAfter && resource.IsDead ||
+                                                resourceBase.WalkableBefore && !resource.IsDead)
+                                            {
+                                                continue;
+                                            }
                                         }
+                                        break;
 
-                                        if (!ignoreDeadResources && ((Resource)en.Value).IsDead)
-                                        {
-                                            blockedBy = en.Value;
-
-                                            return -6;
-                                        }
-
-                                        if (resourceBase.WalkableAfter && ((Resource)en.Value).IsDead ||
-                                            resourceBase.WalkableBefore && !((Resource)en.Value).IsDead)
+                                    case Player player:
+                                        //Return the entity key as this should block the player.  Only exception is if the MapZone this entity is on is passable.
+                                        var entityMap = Maps.MapInstance.Get(player.MapId);
+                                        if (Options.Instance.Passability.Passable[(int)entityMap.ZoneType])
                                         {
                                             continue;
                                         }
-                                    }
-                                }
-                                else if (en.Value.GetType() == typeof(Player))
-                                {
-                                    //Return the entity key as this should block the player.  Only exception is if the MapZone this entity is on is passable.
-                                    var entityMap = Maps.MapInstance.Get(en.Value.MapId);
-                                    if (Options.Instance.Passability.Passable[(int)entityMap.ZoneType])
-                                    {
-                                        continue;
-                                    }
+                                        break;
                                 }
 
                                 blockedBy = en.Value;

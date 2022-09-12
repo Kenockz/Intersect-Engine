@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
@@ -367,7 +367,7 @@ namespace Intersect.Server.Entities
             return true;
         }
 
-        public override void TryAttack(Entity target, bool targetOnFocus = false)
+        public override void TryAttack(Entity target)
         {
             if (target.IsDisposed)
             {
@@ -919,22 +919,6 @@ namespace Intersect.Server.Entities
                                                         dir = 2;
 
                                                         break;
-                                                    case 4:
-                                                        dir = 7;
-
-                                                        break;
-                                                    case 5:
-                                                        dir = 6;
-
-                                                        break;
-                                                    case 6:
-                                                        dir = 5;
-
-                                                        break;
-                                                    case 7:
-                                                        dir = 4;
-
-                                                        break;
                                                 }
                                             }
 
@@ -1026,22 +1010,6 @@ namespace Intersect.Server.Entities
                                             break;
                                         case 3:
                                             dir = 2;
-
-                                            break;
-                                        case 4:
-                                            dir = 7;
-
-                                            break;
-                                        case 5:
-                                            dir = 6;
-
-                                            break;
-                                        case 6:
-                                            dir = 5;
-
-                                            break;
-                                        case 7:
-                                            dir = 4;
 
                                             break;
                                     }

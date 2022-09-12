@@ -1071,7 +1071,6 @@ namespace Intersect.Server.Networking
 
             var unequippedAttack = false;
             var target = packet.Target;
-            bool targetOnFocus = packet.TargetOnFocus;
 
             var clientTime = packet.Adjusted / TimeSpan.TicksPerMillisecond;
             if (player.ClientAttackTimer > clientTime ||
@@ -1155,26 +1154,6 @@ namespace Intersect.Server.Networking
 
                 case 3:
                     attackingTile.Translate(1, 0);
-
-                    break;
-                
-                case 4:
-                    attackingTile.Translate(-1, -1);
-
-                    break;
-
-                case 5:
-                    attackingTile.Translate(1, -1);
-
-                    break;
-
-                case 6:
-                    attackingTile.Translate(-1, 1);
-
-                    break;
-
-                case 7:
-                    attackingTile.Translate(1, 1);
 
                     break;
             }
@@ -1315,7 +1294,7 @@ namespace Intersect.Server.Networking
                 {
                     if (entity.Id == target)
                     {
-                        player.TryAttack(entity, targetOnFocus);
+                        player.TryAttack(entity);
 
                         break;
                     }

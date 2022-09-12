@@ -10,15 +10,8 @@ namespace Intersect.Enums
 
         Left,
 
-        Right,
-        
-        UpLeft,
+        Right
 
-        UpRight,
-
-        DownLeft,
-
-        DownRight
     }
 
 }

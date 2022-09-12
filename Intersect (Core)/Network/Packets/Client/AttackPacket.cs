@@ -12,17 +12,13 @@ namespace Intersect.Network.Packets.Client
 
         }
         
-        public AttackPacket(Guid target, bool targetOnFocus)
+        public AttackPacket(Guid target)
         {
             Target = target;
-            TargetOnFocus = targetOnFocus;
         }
 
         [Key(3)]
         public Guid Target { get; set; }
-        
-        [Key(4)]
-        public bool TargetOnFocus { get; set; }
 
     }
 

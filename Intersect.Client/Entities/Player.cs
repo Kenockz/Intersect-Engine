@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -1094,47 +1094,29 @@ namespace Intersect.Client.Entities
             {
                 movex = 1;
             }
-            
-            // Used this so I can do multiple switch case
-            var move = movex / 10 + movey;
-            
+
+
             Globals.Me.MoveDir = -1;
             if (movex != 0f || movey != 0f)
             {
-                switch (move)
+                if (movey < 0)
                 {
-                    case 1.0f:
-                        Globals.Me.MoveDir = 0; // Up
+                    Globals.Me.MoveDir = 1;
+                }
 
-                        break;
-                    case -1.0f:
-                        Globals.Me.MoveDir = 1; // Down
+                if (movey > 0)
+                {
+                    Globals.Me.MoveDir = 0;
+                }
 
-                        break;
-                    case -0.1f: // x = 0, y = -1
-                        Globals.Me.MoveDir = 2; // Left
+                if (movex < 0)
+                {
+                    Globals.Me.MoveDir = 2;
+                }
 
-                        break;
-                    case 0.1f:
-                        Globals.Me.MoveDir = 3; // Right
-
-                        break;
-                    case 0.9f:
-                        Globals.Me.MoveDir = 4; // NW
-
-                        break;
-                    case 1.1f:
-                        Globals.Me.MoveDir = 5; // NE
-
-                        break;
-                    case -1.1f:
-                        Globals.Me.MoveDir = 6; // SW
-
-                        break;
-                    case -0.9f:
-                        Globals.Me.MoveDir = 7; // SE
-
-                        break;
+                if (movex > 0)
+                {
+                    Globals.Me.MoveDir = 3;
                 }
             }
 
@@ -1441,93 +1423,23 @@ namespace Intersect.Client.Entities
             int x = Globals.Me.X;
             int y = Globals.Me.Y;
             var map = Globals.Me.MapId;
-            
-            List<int[]> hitbox = new List<int[]>();
-            
             switch (Globals.Me.Dir)
             {
                 case 0:
-                    hitbox.AddRange(new List<int[]>
-                    {
-                        new int[] { x - 1, y - 1 }, new int[] { x, y - 1 },
-                        new int[] { x + 1, y - 1 }, new int[] { x - 1, y },
-                        new int[] { x + 1, y },
-                    });
                     y--;
 
                     break;
                 case 1:
-                    hitbox.AddRange(new List<int[]>
-                    {
-                        new int[] { x - 1, y }, new int[] { x + 1, y },
-                        new int[] { x - 1, y + 1 }, new int[] { x, y + 1 },
-                        new int[] { x + 1, y + 1 },
-                    });
                     y++;
 
                     break;
                 case 2:
-                    hitbox.AddRange(new List<int[]>
-                    {
-                        new int[] { x - 1, y - 1 }, new int[] { x, y - 1 },
-                        new int[] { x - 1, y }, new int[] { x - 1, y + 1 },
-                        new int[] { x, y + 1 }
-                    });
                     x--;
 
                     break;
                 case 3:
-                    hitbox.AddRange(new List<int[]>
-                    {
-                        new int[] { x, y - 1 }, new int[] { x + 1, y - 1 },
-                        new int[] { x + 1, y }, new int[] { x, y + 1 },
-                        new int[] { x + 1, y + 1 }
-                    });
                     x++;
 
-                    break;
-                case 4: // UpLeft
-                    hitbox.AddRange(new List<int[]>
-                    {
-                        new int[] { x - 1, y - 1 }, new int[] { x, y - 1 },
-                        new int[] { x + 1, y - 1 }, new int[] { x - 1, y },
-                        new int[] { x - 1, y + 1 }
-                    });
-                    y--;
-                    x--;
-
-                    break;
-                case 5: //UpRight
-                    hitbox.AddRange(new List<int[]>
-                    {
-                        new int[] { x - 1, y - 1 }, new int[] { x, y - 1 },
-                        new int[] { x + 1, y - 1 }, new int[] { x + 1, y },
-                        new int[] { x + 1, y + 1 }
-                    });
-                    y--;
-                    x++;
-
-                    break;
-                case 6: // DownLeft
-                    hitbox.AddRange(new List<int[]>
-                    {
-                        new int[] { x - 1, y - 1 },
-                        new int[] { x - 1, y },
-                        new int[] { x - 1, y + 1 }, new int[] { x, y + 1 }, new int[] { x + 1, y + 1 }
-                    });
-                    y++;
-                    x--;
-
-                    break;
-                case 7: // DownRight
-                    hitbox.AddRange(new List<int[]>
-                    {
-                        new int[] { x + 1, y - 1 }, new int[] { x + 1, y },
-                        new int[] { x - 1, y + 1 }, new int[] { x, y + 1 },
-                        new int[] { x + 1, y + 1 }
-                    });
-                    y++;
-                    x++;
                     break;
             }
 
@@ -1543,34 +1455,15 @@ namespace Intersect.Client.Entities
                     if (en.Value != Globals.Me)
                     {
                         if (en.Value.MapId == map &&
+                            en.Value.X == x &&
+                            en.Value.Y == y &&
                             en.Value.CanBeAttacked())
                         {
-                            if (TargetIndex != null && en.Value.IsATarget)
-                            {
-                                bool canAttack = false;
-                                foreach (int[] hitBx in hitbox)
-                                {
-                                    if (hitBx[0] == en.Value.X && hitBx[1] == en.Value.Y)
-                                    {
-                                        canAttack = true;
-                                        break;
-                                    }
-                                }
+                            //ATTACKKKKK!!!
+                            PacketSender.SendAttack(en.Key);
+                            AttackTimer = Timing.Global.Ticks / TimeSpan.TicksPerMillisecond + CalculateAttackTime();
 
-                                if (canAttack)
-                                {
-                                    PacketSender.SendAttack(en.Key, en.Value.IsATarget);
-                                    AttackTimer = Timing.Global.Ticks / TimeSpan.TicksPerMillisecond + CalculateAttackTime();
-                                    return true;
-                                }
-                            }
-                            else if (en.Value.X == x && en.Value.Y == y)
-                            {
-                                //ATTACKKKKK!!!
-                                PacketSender.SendAttack(en.Key, en.Value.IsATarget);
-                                AttackTimer = Timing.Global.Ticks / TimeSpan.TicksPerMillisecond + CalculateAttackTime();
-                                return true;
-                            }
+                            return true;
                         }
                     }
                 }
@@ -1600,7 +1493,7 @@ namespace Intersect.Client.Entities
             }
 
             //Projectile/empty swing for animations
-            PacketSender.SendAttack(Guid.Empty, false);
+            PacketSender.SendAttack(Guid.Empty);
             AttackTimer = Timing.Global.Ticks / TimeSpan.TicksPerMillisecond + CalculateAttackTime();
 
             return true;
@@ -1974,15 +1867,12 @@ namespace Intersect.Client.Entities
 
                     switch (MoveDir)
                     {
-                        // Dir is the direction the player faces
-                        // tmp the next position of the player
-                        // DeplacementDir is used because I don't know how to set the sprite animation for the diagonal movement.
                         case 0: // Up
                             if (IsTileBlocked(X, Y - 1, Z, MapId, ref blockedBy) == -1)
                             {
                                 tmpY--;
                                 IsMoving = true;
-                                Dir = 0; // Set the sprite direction
+                                Dir = 0;
                                 OffsetY = Options.TileHeight;
                                 OffsetX = 0;
                             }
@@ -2017,51 +1907,6 @@ namespace Intersect.Client.Entities
                                 IsMoving = true;
                                 Dir = 3;
                                 OffsetY = 0;
-                                OffsetX = -Options.TileWidth;
-                            }
-
-                            break;
-                        case 4: // NW
-                            if (IsTileBlocked(X - 1, Y - 1, Z, MapId, ref blockedBy) == -1)
-                            {
-                                tmpY--;
-                                tmpX--;
-                                IsMoving = true;
-                                Dir = 4;
-                                OffsetY = Options.TileHeight;
-                                OffsetX = Options.TileWidth;
-                            }
-                            break;
-                        case 5: // NE
-                            if (IsTileBlocked(X + 1, Y - 1, Z, MapId, ref blockedBy) == -1)
-                            {
-                                tmpY--;
-                                tmpX++;
-                                IsMoving = true;                            
-                                Dir = 5;
-                                OffsetY = Options.TileHeight;
-                                OffsetX = -Options.TileWidth;
-                            }
-                            break;
-                        case 6: // SW
-                            if (IsTileBlocked(X - 1, Y + 1, Z, MapId, ref blockedBy) == -1)
-                            {
-                                tmpY++;
-                                tmpX--;
-                                IsMoving = true;
-                                Dir = 6;
-                                OffsetY = -Options.TileHeight;
-                                OffsetX = Options.TileWidth;
-                            }
-                            break;
-                        case 7: // SE
-                            if (IsTileBlocked(X + 1, Y + 1, Z, MapId, ref blockedBy) == -1)
-                            {
-                                tmpY++;
-                                tmpX++;
-                                IsMoving = true;
-                                Dir = 7;
-                                OffsetY = -Options.TileHeight;
                                 OffsetX = -Options.TileWidth;
                             }
 
@@ -2422,7 +2267,6 @@ namespace Intersect.Client.Entities
                         if (TargetType == 0 && TargetIndex == en.Value.Id)
                         {
                             en.Value.DrawTarget((int)TargetTypes.Selected);
-                            en.Value.IsATarget = true;
                         }
                     }
                 }
